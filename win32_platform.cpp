@@ -1,27 +1,34 @@
+#include "utils.cpp"
 #include <Windows.h>
 
-bool running = true;
+
+global_variable bool running = true;
 
 struct Render_State {
 	int height, width;
 	void* memory;
 	BITMAPINFO bitmap_info;
 };
-Render_State render_state;
 
+global_variable Render_State render_state;
+
+#include "platform_common.cpp"
 #include "renderer.cpp"
+#include "game.cpp"
 
 
 LRESULT CALLBACK window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lparam)
 {
 	LRESULT result = 0;
-	switch (uMsg) {
-	case WM_CLOSE:
-	case WM_DESTROY: {
-		running = false;
+	switch (uMsg) 
+	{
+		case WM_CLOSE:
+		case WM_DESTROY: {
+			running = false;
 		}break;
 
-	case WM_SIZE: {
+	case WM_SIZE: 
+	{
 		RECT rect;
 		GetClientRect(hwnd, &rect);
 		render_state.width = rect.right - rect.left;
@@ -39,47 +46,81 @@ LRESULT CALLBACK window_callback(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lpa
 		render_state.bitmap_info.bmiHeader.biBitCount = 32;
 		render_state.bitmap_info.bmiHeader.biCompression = BI_RGB;
 
-	}break;
+		}break;
 
-	default: {
-		result = DefWindowProc(hwnd, uMsg, wParam, lparam);
+		default: 
+		{
+			result = DefWindowProc(hwnd, uMsg, wParam, lparam);
+		}
 	}
-		   return result;
-	}
-	return DefWindowProc(hwnd, uMsg, wParam, lparam);
+	return result;
 }
 
-int winmain(HINSTANCE hinstance, HINSTANCE hprevinstance, LPSTR lpcmdline, int nShowCmd)
+int WinMain(HINSTANCE hinstance, HINSTANCE hprevinstance, LPSTR lpcmdline, int nShowCmd)
 {
 	//Create window Class
 	WNDCLASS window_class = {};
 	window_class.style = CS_HREDRAW | CS_VREDRAW;
 	window_class.lpszClassName = "Game Window Class";
-	window_class.lpfnWndProc; //Call back function
+	window_class.lpfnWndProc = window_callback;
 
 	// Registar Class
 	RegisterClass(&window_class);
 
 	//Create window
-	HWND window = CreateWindow(window_class.lpszClassName, "PONG",WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,CW_USEDEFAULT, 1200, 720, 0, 0, hinstance, 0);
+	HWND window = CreateWindow(window_class.lpszClassName, "PONG",WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,CW_USEDEFAULT, 1280, 720, 0, 0, hinstance, 0);
 	HDC hdc = GetDC(window);
+
+	Input input = {};
 
 	//Game Loop
 	while (running) {
 		//input
 		MSG message;
+
+		for (int i = 0; i < BUTTON_COUNT; i++)
+		{
+			input.buttons[i].changed = false;
+		}
+
 		while (PeekMessage(&message, window, 0, 0, PM_REMOVE)) {
-			TranslateMessage(&message);
-			DispatchMessage(&message);
+			switch (message.message)
+			{
+				case WM_KEYUP:
+				case WM_KEYDOWN:
+				{
+					u32 vk_code = (u32)message.wParam;
+					bool is_down = ((message.lParam & (1 << 32)) == 0);
+
+#define process_button(b,vk)\
+case vk:{\
+input.buttons[b].changed = is_down != input.buttons[b].is_down;\
+input.buttons[b].is_down = is_down;\
+}break;
+
+					switch (vk_code)
+					{
+						process_button(BUTTON_UP, VK_UP);
+						process_button(BUTTON_DOWN, VK_DOWN);
+						process_button(BUTTON_LEFT, VK_LEFT);
+						process_button(BUTTON_RIGHT, VK_RIGHT);
+					}
+				}break;
+
+				default:
+				{
+					TranslateMessage(&message);
+					DispatchMessage(&message);
+				}
+			}
+
 		}
 
 		//Simulate
-		clear_screen(0xff5500);
-		draw_rect(50,50,200,500,0xff0000);
+		simulate_game(&input);
 
 		//Render
 		StretchDIBits(hdc, 0, 0, render_state.width, render_state.height, 0, 0, render_state.width, render_state.height, render_state.memory, &render_state.bitmap_info, DIB_RGB_COLORS, SRCCOPY);
 
 	}
-
 }
